@@ -39,3 +39,16 @@ build/
 
 ### Resúmenes guardados en local (app.resumen.almacenamiento=local) ###
 /resumenes/
+
+
+.vscode/launch.json
+.env
+*.pem
+
+# Configuraciones locales de VS Code
+.vscode/
+,vscode/
+
+# Credenciales
+.env
+*.pem
