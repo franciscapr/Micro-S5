@@ -1,4 +1,5 @@
-name: Build and Push Docker Image
+
+name: Build and Deploy Micro-S5
 
 on:
   push:
@@ -8,11 +9,12 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to DockerHub
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -26,26 +28,34 @@ jobs:
         run: |
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/my-app:latest
 
-      - name: Add SSH Key
+      - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-      - name: SSH commands to deploy
+      - name: Deploy to EC2
         run: |
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.USER_SERVER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/my-app:latest
-            docker stop my-app || true && docker rm my-app || true
-            docker run -d --name my-app --restart unless-stopped -p 8080:8080 \
-              -e SPRING_DATASOURCE_URL='${{ vars.RDS_URL }}' \
-              -e SPRING_DATASOURCE_USERNAME='${{ vars.RDS_USER }}' \
-              -e SPRING_DATASOURCE_PASSWORD='${{ secrets.RDS_PASSWORD }}' \
-              -e AWS_S3_BUCKET='${{ vars.AWS_S3_BUCKET || 'eventos-dami' }}' \
-              -e AWS_REGION='${{ vars.AWS_REGION || 'us-east-1' }}' \
-              -e AWS_ACCESS_KEY_ID='${{ secrets.AWS_ACCESS_KEY_ID }}' \
-              -e AWS_SECRET_ACCESS_KEY='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
-              -e AWS_SESSION_TOKEN='${{ secrets.AWS_SESSION_TOKEN }}' \
-              ${{ secrets.DOCKERHUB_USERNAME }}/my-app:latest
+          ssh -i ~/.ssh/id_rsa \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.USER_SERVER }}@${{ secrets.EC2_HOST }} << 'EOF'
+              set -e
+
+              docker pull ${{ secrets.DOCKERHUB_USERNAME }}/my-app:latest
+
+              docker stop my-app || true
+              docker rm my-app || true
+
+              docker run -d \
+                --name my-app \
+                --restart unless-stopped \
+                -p 8080:8080 \
+                -e AWS_S3_BUCKET='${{ vars.AWS_S3_BUCKET || 'cdy2204-fp' }}' \
+                -e AWS_REGION='${{ vars.AWS_REGION || 'us-east-1' }}' \
+                -e AWS_ACCESS_KEY_ID='${{ secrets.AWS_ACCESS_KEY_ID }}' \
+                -e AWS_SECRET_ACCESS_KEY='${{ secrets.AWS_SECRET_ACCESS_KEY }}' \
+                -e AWS_SESSION_TOKEN='${{ secrets.AWS_SESSION_TOKEN }}' \
+                ${{ secrets.DOCKERHUB_USERNAME }}/my-app:latest
+
+              docker ps
           EOF
